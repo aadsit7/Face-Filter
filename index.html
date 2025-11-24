@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snapchat-Style Face Filter Web App</title>
+    <!-- Inline CSS for responsive layout -->
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+        .tabs { display: flex; justify-content: space-around; background: #f0f0f0; padding: 10px; }
+        .tab-button { flex: 1; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #ccc; background: white; }
+        .tab-button.active { background: #ddd; }
+        .tab-content { flex: 1; display: none; padding: 20px; text-align: center; overflow: auto; }
+        .tab-content.active { display: block; }
+        #upload-preview { max-width: 100%; height: auto; margin-top: 20px; }
+        #camera-container { position: relative; width: 100%; height: 80%; }
+        #video { display: none; } /* Hidden, used as source for canvas */
+        #canvas { max-width: 100%; height: auto; }
+        button, input { padding: 10px; font-size: 16px; margin: 10px 0; }
+        @media (max-width: 600px) { .tab-button { font-size: 14px; } }
+    </style>
+    <!-- Load face-api.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+</head>
+<body>
+    <!-- Tab navigation -->
+    <div class="tabs">
+        <div class="tab-button active" onclick="switchTab('upload')">Upload Image</div>
+        <div class="tab-button" onclick="switchTab('camera')">Camera Filter</div>
+    </div>
+
+    <!-- Tab 1: Upload Image -->
+    <div id="upload-tab" class="tab-content active">
+        <h2>Upload Filter Image</h2>
+        <input type="file" id="upload-input" accept="image/png, image/jpeg">
+        <img id="upload-preview" alt="Preview of uploaded image">
+        <p id="upload-message" style="display: none;">Image uploaded! Switch to the Camera tab to apply the filter.</p>
+    </div>
+
+    <!-- Tab 2: Camera Filter -->
+    <div id="camera-tab" class="tab-content">
+        <h2>Camera Filter</h2>
+        <p id="no-image-message">Please upload an image in the Upload tab first.</p>
+        <div id="camera-container" style="display: none;">
+            <video id="video" playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        <button id="start-camera" style="display: none;">Start Camera</button>
+    </div>
+
+    <!-- Inline JS for functionality -->
+    <script>
+        // Global variables
+        let uploadedImage = null; // Stores the uploaded filter image
+        let video = null;
+        let canvas = null;
+        let isCameraRunning = false;
+        let modelsLoaded = false;
+
+        // Tab switching function
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelector(`[onclick="switchTab('${tab}')"]`).classList.add('active');
+            document.getElementById(`${tab}-tab`).classList.add('active');
+            // If switching to camera tab and image is uploaded, show start button
+            if (tab === 'camera' && uploadedImage) {
+                document.getElementById('no-image-message').style.display = 'none';
+                document.getElementById('start-camera').style.display = 'block';
+            } else if (tab === 'camera') {
+                document.getElementById('no-image-message').style.display = 'block';
+                document.getElementById('start-camera').style.display = 'none';
+                document.getElementById('camera-container').style.display = 'none';
+            }
+        }
+
+        // Load models on page load
+        async function loadModels() {
+            try {
+                // Load TinyFaceDetector and FaceLandmark68 from local /models/
+                await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+                await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+                modelsLoaded = true;
+            } catch (error) {
+                console.error('Error loading models:', error);
+                alert('Failed to load face detection models. Ensure /models/ folder is set up correctly.');
+            }
+        }
+
+        // Initialize camera and detection loop
+        async function startCamera() {
+            if (!modelsLoaded || !uploadedImage) return;
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            const noImageMsg = document.getElementById('no-image-message');
+            const cameraContainer = document.getElementById('camera-container');
+            const startButton = document.getElementById('start-camera');
+
+            noImageMsg.style.display = 'none';
+            startButton.style.display = 'none';
+            cameraContainer.style.display = 'block';
+
+            // Get front-facing camera stream with iPhone-compatible constraints
+            const constraints = { video: { facingMode: 'user' } };
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                video.setAttribute('playsinline', true); // Required for iOS Safari inline playback
+                video.addEventListener('loadedmetadata', () => {
+                    // Resize canvas to match video dimensions for performance
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    isCameraRunning = true;
+                    detectAndDraw();
+                });
+                video.play(); // Start playback
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Camera access denied or unavailable. Grant permission in browser settings.');
+            }
+        }
+
+        // Real-time detection and drawing loop using requestAnimationFrame
+        async function detectAndDraw() {
+            if (!isCameraRunning) return;
+            const ctx = canvas.getContext('2d');
+            // Draw video frame to canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Detect faces with landmarks (optimized for mobile: inputSize 320, scoreThreshold 0.5)
+            const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+            const detections = await faceapi.detectAllFaces(video, options).withFaceLandmarks();
+
+            if (detections.length > 0) {
+                const detection = detections[0]; // Use first detected face
+                const landmarks = detection.landmarks;
+                const box = detection.detection.box;
+
+                // Use eye landmarks to compute overlay position
+                const leftEye = landmarks.getLeftEye();
+                const rightEye = landmarks.getRightEye();
+                // Compute center between eyes
+                const eyeCenterX = (leftEye.reduce((sum, p) => sum + p.x, 0) / leftEye.length + rightEye.reduce((sum, p) => sum + p.x, 0) / rightEye.length) / 2;
+                const eyeCenterY = (leftEye.reduce((sum, p) => sum + p.y, 0) / leftEye.length + rightEye.reduce((sum, p) => sum + p.y, 0) / rightEye.length) / 2;
+
+                // Scale overlay to 2.2 × face width
+                const overlayWidth = box.width * 2.2;
+                const overlayHeight = (uploadedImage.height / uploadedImage.width) * overlayWidth;
+                // Position centered on eye center, adjusted upward slightly for typical filter placement
+                const overlayX = eyeCenterX - overlayWidth / 2;
+                const overlayY = eyeCenterY - overlayHeight / 2 - box.height * 0.2; // Offset for forehead/face coverage
+
+                // Draw overlay image
+                ctx.drawImage(uploadedImage, overlayX, overlayY, overlayWidth, overlayHeight);
+            }
+
+            // Loop for 15-30 FPS target
+            requestAnimationFrame(detectAndDraw);
+        }
+
+        // Handle image upload
+        document.getElementById('upload-input').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const preview = document.getElementById('upload-preview');
+                    preview.src = e.target.result;
+                    // Store image in memory for overlay
+                    uploadedImage = new Image();
+                    uploadedImage.src = e.target.result;
+                    document.getElementById('upload-message').style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Attach start camera button event
+        document.getElementById('start-camera').addEventListener('click', startCamera);
+
+        // Load models on page init
+        loadModels();
+    </script>
+</body>
+</html>
