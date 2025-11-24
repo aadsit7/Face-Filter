@@ -553,7 +553,7 @@
       if (!isCameraRunning || !video || video.readyState < 2) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const options = new faceapi.TinyFaceDetectorOptions({
-        inputSize: 320,
+        inputSize: 128,
         scoreThreshold: 0.5,
       });
       const detection = await faceapi
