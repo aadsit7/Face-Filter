@@ -30,7 +30,7 @@
           <h2 class="text-xl font-medium mb-4">Camera Filter</h2>
           <p id="no-image-message" class="text-base text-gray-700 leading-relaxed">Please upload an image in the Upload tab first.</p>
           <div id="camera-container" class="relative w-full hidden">
-            <video id="video" playsinline class="hidden"></video>
+            <video id="video" playsinline autoplay muted class="hidden"></video>
             <canvas id="canvas" class="max-w-full h-auto rounded-lg"></canvas>
           </div>
           <button id="start-camera" class="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-6 py-2 shadow-sm hidden">Start Camera</button>
@@ -41,10 +41,13 @@
     <script>
       lucide.createIcons();
       let uploadedImage = null;
+      let upperMask = null;
+      let lowerMask = null;
       let video = null;
       let canvas = null;
       let isCameraRunning = false;
       let modelsLoaded = false;
+      let blinkFrames = 0;
       const tabButtons = document.querySelectorAll('.tab-button');
       const tabContents = document.querySelectorAll('.tab-content');
       tabButtons.forEach(button => {
@@ -127,6 +130,10 @@
         }
         isCameraRunning = false;
       }
+      // Helper function to compute Euclidean distance between two points
+      function dist(p1, p2) {
+        return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
+      }
       async function detectAndDraw() {
         if (!isCameraRunning) return;
         const ctx = canvas.getContext('2d');
@@ -139,13 +146,46 @@
           const box = detection.detection.box;
           const leftEye = landmarks.getLeftEye();
           const rightEye = landmarks.getRightEye();
+          const mouth = landmarks.getMouth();
           const eyeCenterX = (leftEye.reduce((sum, p) => sum + p.x, 0) / leftEye.length + rightEye.reduce((sum, p) => sum + p.x, 0) / rightEye.length) / 2;
           const eyeCenterY = (leftEye.reduce((sum, p) => sum + p.y, 0) / leftEye.length + rightEye.reduce((sum, p) => sum + p.y, 0) / rightEye.length) / 2;
+          // Compute mouth openness: average vertical distance between inner upper and lower lip points
+          // mouth[13] = point 61, mouth[19] = 67; mouth[14]=62, mouth[18]=66; mouth[15]=63, mouth[17]=65
+          const openness1 = mouth[13].y - mouth[19].y;
+          const openness2 = mouth[14].y - mouth[18].y;
+          const openness3 = mouth[15].y - mouth[17].y;
+          const mouthOpenness = (Math.abs(openness1) + Math.abs(openness2) + Math.abs(openness3)) / 3;
+          // Compute Eye Aspect Ratio (EAR) for blink detection
+          // Left eye EAR: (dist(43,47) + dist(44,46)) / (2 * dist(42,45))
+          const leftEAR = (dist(leftEye[1], leftEye[5]) + dist(leftEye[2], leftEye[4])) / (2 * dist(leftEye[0], leftEye[3]));
+          // Right eye EAR: (dist(37,41) + dist(38,40)) / (2 * dist(36,39))
+          const rightEAR = (dist(rightEye[1], rightEye[5]) + dist(rightEye[2], rightEye[4])) / (2 * dist(rightEye[0], rightEye[3]));
+          const avgEAR = (leftEAR + rightEAR) / 2;
+          // Blink detection: if avgEAR < 0.25 and no ongoing blink effect, trigger for 5 frames
+          if (avgEAR < 0.25 && blinkFrames === 0) {
+            blinkFrames = 5;
+          }
           const overlayWidth = box.width * 2.2;
-          const overlayHeight = (uploadedImage.height / uploadedImage.width) * overlayWidth;
+          const fullOverlayHeight = (uploadedImage.height / uploadedImage.width) * overlayWidth;
+          const halfOverlayHeight = fullOverlayHeight / 2;
           const overlayX = eyeCenterX - overlayWidth / 2;
-          const overlayY = eyeCenterY - overlayHeight / 2 - box.height * 0.2;
-          ctx.drawImage(uploadedImage, overlayX, overlayY, overlayWidth, overlayHeight);
+          const upperOverlayY = eyeCenterY - fullOverlayHeight / 2 - box.height * 0.2;
+          const lowerOverlayY = upperOverlayY + halfOverlayHeight + mouthOpenness * 0.5; // Offset lower mask based on mouth openness (scaled by 0.5 for subtlety)
+          // Apply blink effect: scale mask slightly if blinkFrames > 0
+          if (blinkFrames > 0) {
+            ctx.save();
+            ctx.translate(eyeCenterX, eyeCenterY);
+            ctx.scale(1.05, 1.05);
+            ctx.translate(-eyeCenterX, -eyeCenterY);
+            blinkFrames--;
+          }
+          // Draw upper mask
+          ctx.drawImage(upperMask, overlayX, upperOverlayY, overlayWidth, halfOverlayHeight);
+          // Draw lower mask with offset
+          ctx.drawImage(lowerMask, overlayX, lowerOverlayY, overlayWidth, halfOverlayHeight);
+          if (blinkFrames > 0) {
+            ctx.restore();
+          }
         }
         requestAnimationFrame(detectAndDraw);
       }
@@ -159,7 +199,28 @@
             preview.classList.remove('hidden');
             uploadedImage = new Image();
             uploadedImage.src = e.target.result;
-            document.getElementById('upload-message').classList.remove('hidden');
+            uploadedImage.onload = () => {
+              // Split uploadedImage into upper and lower masks using offscreen canvases
+              const width = uploadedImage.width;
+              const height = uploadedImage.height;
+              // Upper mask: top half
+              const upperCanvas = document.createElement('canvas');
+              upperCanvas.width = width;
+              upperCanvas.height = height / 2;
+              const upperCtx = upperCanvas.getContext('2d');
+              upperCtx.drawImage(uploadedImage, 0, 0, width, height / 2, 0, 0, width, height / 2);
+              upperMask = new Image();
+              upperMask.src = upperCanvas.toDataURL();
+              // Lower mask: bottom half
+              const lowerCanvas = document.createElement('canvas');
+              lowerCanvas.width = width;
+              lowerCanvas.height = height / 2;
+              const lowerCtx = lowerCanvas.getContext('2d');
+              lowerCtx.drawImage(uploadedImage, 0, height / 2, width, height / 2, 0, 0, width, height / 2);
+              lowerMask = new Image();
+              lowerMask.src = lowerCanvas.toDataURL();
+              document.getElementById('upload-message').classList.remove('hidden');
+            };
           };
           reader.readAsDataURL(file);
         }
