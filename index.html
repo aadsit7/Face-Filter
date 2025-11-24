@@ -34,6 +34,7 @@
             <canvas id="canvas" class="max-w-full h-auto rounded-lg"></canvas>
           </div>
           <button id="start-camera" class="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-6 py-2 shadow-sm hidden">Start Camera</button>
+          <button id="fullscreen-btn" class="bg-green-600 hover:bg-green-700 text-white rounded-full px-6 py-2 shadow-sm ml-4 hidden">Enter Full Screen</button>
         </section>
       </main>
     </div>
@@ -59,13 +60,24 @@
           button.setAttribute('aria-selected', 'true');
           tabContents.forEach(content => content.classList.add('hidden'));
           document.getElementById(`${tab}-tab`).classList.remove('hidden');
-          if (tab === 'camera' && uploadedImage) {
-            document.getElementById('no-image-message').classList.add('hidden');
-            document.getElementById('start-camera').classList.remove('hidden');
-          } else if (tab === 'camera') {
-            document.getElementById('no-image-message').classList.remove('hidden');
-            document.getElementById('start-camera').classList.add('hidden');
+          if (tab === 'camera') {
+            if (uploadedImage) {
+              document.getElementById('no-image-message').classList.add('hidden');
+              document.getElementById('start-camera').classList.remove('hidden');
+              if (isCameraRunning) {
+                document.getElementById('camera-container').classList.remove('hidden');
+                document.getElementById('fullscreen-btn').classList.remove('hidden');
+              }
+            } else {
+              document.getElementById('no-image-message').classList.remove('hidden');
+              document.getElementById('start-camera').classList.add('hidden');
+              document.getElementById('camera-container').classList.add('hidden');
+              document.getElementById('fullscreen-btn').classList.add('hidden');
+            }
+          } else {
+            stopCamera();
             document.getElementById('camera-container').classList.add('hidden');
+            document.getElementById('fullscreen-btn').classList.add('hidden');
           }
         });
       });
@@ -86,9 +98,11 @@
         const noImageMsg = document.getElementById('no-image-message');
         const cameraContainer = document.getElementById('camera-container');
         const startButton = document.getElementById('start-camera');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
         noImageMsg.classList.add('hidden');
         startButton.classList.add('hidden');
         cameraContainer.classList.remove('hidden');
+        fullscreenBtn.classList.remove('hidden');
         const constraints = { video: { facingMode: 'user' } };
         try {
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -99,19 +113,26 @@
             canvas.height = video.videoHeight;
             isCameraRunning = true;
             detectAndDraw();
-          });
+          }, { once: true });
           video.play();
         } catch (error) {
           console.error('Error accessing camera:', error);
           alert('Camera access denied or unavailable. Please grant permission in your browser settings.');
         }
       }
+      function stopCamera() {
+        if (video && video.srcObject) {
+          video.srcObject.getTracks().forEach(track => track.stop());
+          video.srcObject = null;
+        }
+        isCameraRunning = false;
+      }
       async function detectAndDraw() {
         if (!isCameraRunning) return;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
-        const detections = await faceapi.detectAllFaces(video, options).withFaceLandmarks();
+        const detections = await faceapi.detectAllFaces(canvas, options).withFaceLandmarks();
         if (detections.length > 0) {
           const detection = detections[0];
           const landmarks = detection.landmarks;
@@ -144,6 +165,17 @@
         }
       });
       document.getElementById('start-camera').addEventListener('click', startCamera);
+      document.getElementById('fullscreen-btn').addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          canvas.requestFullscreen().catch(err => console.error('Fullscreen error:', err));
+        } else {
+          document.exitFullscreen();
+        }
+      });
+      document.addEventListener('fullscreenchange', () => {
+        const btn = document.getElementById('fullscreen-btn');
+        btn.textContent = document.fullscreenElement ? 'Exit Full Screen' : 'Enter Full Screen';
+      });
       loadModels();
     </script>
   </body>
