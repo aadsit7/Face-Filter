@@ -186,7 +186,7 @@
   </div>
   <script>
     // ----------------- GLOBALS & UTILITIES -----------------
-    const MODEL_URL = "https://aadsit7.github.io/Face-Filter/models";
+    const MODEL_URL = "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights";
     const filters = []; // {id, name, image, upperCanvas, lowerCanvas, scale, offsetX, offsetY, jawFactor}
     let activeFilterId = null;
     let earsImage = null;
@@ -557,7 +557,7 @@
         scoreThreshold: 0.5,
       });
       const detection = await faceapi
-        .detectSingleFace(video, options)
+        .detectSingleFace(canvas, options)
         .withFaceLandmarks();
       if (detection && getActiveFilter()) {
         drawFilter(detection);
