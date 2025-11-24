@@ -4,29 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Snapchat-Style Face Filter</title>
-  <!-- Tailwind CSS -->
+  <!-- Tailwind via CDN for quick styling -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- TensorFlow + WASM backend -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@3.21.0/dist/tf-backend-wasm.min.js"></script>
-  <!-- face-api.js -->
+  <!-- Face-api.js for face detection & landmarks -->
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
+    /* Simple tab active state helper (Tailwind handles most styles) */
     .tab-active {
-      background-color: rgb(37 99 235);
+      background-color: rgb(37 99 235); /* blue-600 */
       color: white;
     }
     .tab-inactive {
       background-color: transparent;
-      color: rgb(55 65 81);
-    }
-    #debug-panel {
-      max-height: 160px;
-      overflow-y: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      color: rgb(55 65 81); /* gray-700 */
     }
   </style>
 </head>
@@ -37,459 +30,322 @@
         Snapchat-Style Face Filter
       </h1>
       <p class="text-gray-600 mt-1 text-sm sm:text-base">
-        Upload one or more mask images (person, caricature, dog, cat, etc.), then use your camera to apply them as a live face filter.
+        1) Upload a mask image &nbsp; 2) Open camera & apply it as a live face filter.
       </p>
     </header>
     <!-- Tabs -->
-    <nav class="flex mb-4 bg-white rounded-full p-1 shadow-md text-sm sm:text-base" role="tablist" aria-label="Tabs">
-      <button id="tab-upload-btn" class="flex-1 py-2 px-4 rounded-full font-medium tab-active" data-tab="upload">
-        Upload / Filters
+    <nav
+      class="flex mb-4 bg-white rounded-full p-1 shadow-md text-sm sm:text-base"
+      role="tablist"
+      aria-label="Tabs"
+    >
+      <button
+        id="tab-upload-btn"
+        class="flex-1 py-2 px-4 rounded-full font-medium tab-active"
+        data-tab="upload"
+        role="tab"
+        aria-selected="true"
+        aria-controls="upload-tab"
+      >
+        Upload Image
       </button>
-      <button id="tab-camera-btn" class="flex-1 py-2 px-4 rounded-full font-medium tab-inactive" data-tab="camera">
+      <button
+        id="tab-camera-btn"
+        class="flex-1 py-2 px-4 rounded-full font-medium tab-inactive"
+        data-tab="camera"
+        role="tab"
+        aria-selected="false"
+        aria-controls="camera-tab"
+      >
         Camera Filter
       </button>
     </nav>
+    <!-- Main content -->
     <main class="flex-1">
-      <!-- Upload / Filters Tab -->
-      <section id="upload-tab" class="bg-white rounded-2xl shadow-md p-4 sm:p-6">
-        <h2 class="text-lg sm:text-xl font-medium mb-3">Filters & Assets</h2>
-        <!-- Filter upload -->
-        <div class="mb-4 border-b pb-4">
-          <h3 class="font-semibold mb-2">Add New Filter</h3>
-          <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-            <input id="filter-name-input" type="text" placeholder="Filter name (e.g. Talking Dog)"
-                   class="border rounded-lg px-3 py-2 text-sm w-full sm:w-64" />
-            <div>
-              <label for="filter-image-input"
-                     class="inline-block bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 py-2 text-sm cursor-pointer shadow-sm">
-                Choose Mask Image
-              </label>
-              <input id="filter-image-input" type="file" accept="image/png,image/jpeg" class="hidden" />
-            </div>
-          </div>
-          <p class="text-xs text-gray-500 mt-2">
-            The mask will be auto-split into upper & lower halves for talking animation.
-          </p>
+      <!-- Upload Tab -->
+      <section
+        id="upload-tab"
+        class="tab-content bg-white rounded-2xl shadow-md p-4 sm:p-6"
+        role="tabpanel"
+        aria-labelledby="tab-upload-btn"
+      >
+        <h2 class="text-lg sm:text-xl font-medium mb-3">
+          Upload Filter Image
+        </h2>
+        <p class="text-gray-700 text-sm sm:text-base mb-3">
+          Choose a PNG/JPG image that will act as your face filter (for example, a dog face).
+        </p>
+        <label
+          for="upload-input"
+          class="inline-block bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 py-2 text-sm sm:text-base cursor-pointer shadow-sm mb-4"
+        >
+          Choose Image
+        </label>
+        <input
+          type="file"
+          id="upload-input"
+          accept="image/png, image/jpeg"
+          class="hidden"
+        />
+        <div id="upload-preview-wrapper" class="mt-2 hidden">
+          <p class="text-gray-600 text-sm mb-2">Preview:</p>
+          <img
+            id="upload-preview"
+            alt="Preview of uploaded image"
+            class="max-w-full h-auto rounded-lg border border-gray-200"
+          />
         </div>
-        <!-- Filter list -->
-        <div class="mb-4">
-          <h3 class="font-semibold mb-2">Available Filters</h3>
-          <div id="filters-list" class="space-y-2 text-sm">
-            <p id="no-filters-msg" class="text-gray-500 text-sm">
-              No filters yet. Add one above.
-            </p>
-          </div>
-        </div>
-        <!-- Extra assets: ears, tongue, sparkles -->
-        <div class="grid sm:grid-cols-3 gap-4 border-t pt-4 mt-4">
-          <div>
-            <h3 class="font-semibold mb-1 text-sm">Ears (optional)</h3>
-            <label for="ears-image-input"
-                   class="inline-block bg-purple-600 hover:bg-purple-700 text-white rounded-full px-4 py-1 text-xs cursor-pointer shadow-sm">
-              Upload Ears PNG
-            </label>
-            <input id="ears-image-input" type="file" accept="image/png" class="hidden" />
-            <p class="text-xs text-gray-500 mt-1">Drawn above the head.</p>
-          </div>
-          <div>
-            <h3 class="font-semibold mb-1 text-sm">Tongue (optional)</h3>
-            <label for="tongue-image-input"
-                   class="inline-block bg-pink-600 hover:bg-pink-700 text-white rounded-full px-4 py-1 text-xs cursor-pointer shadow-sm">
-              Upload Tongue PNG
-            </label>
-            <input id="tongue-image-input" type="file" accept="image/png" class="hidden" />
-            <p class="text-xs text-gray-500 mt-1">Shows when mouth opens wide.</p>
-          </div>
-          <div>
-            <h3 class="font-semibold mb-1 text-sm">Sparkles (optional)</h3>
-            <label for="sparkles-image-input"
-                   class="inline-block bg-yellow-500 hover:bg-yellow-600 text-white rounded-full px-4 py-1 text-xs cursor-pointer shadow-sm">
-              Upload Sparkles PNG
-            </label>
-            <input id="sparkles-image-input" type="file" accept="image/png" class="hidden" />
-            <p class="text-xs text-gray-500 mt-1">Animated near cheeks.</p>
-          </div>
-        </div>
-        <!-- Preview of active filter -->
-        <div id="active-filter-preview-wrapper" class="mt-6 hidden">
-          <h3 class="font-semibold mb-2">Active Filter Preview</h3>
-          <div class="flex gap-4 items-start">
-            <img id="active-filter-preview" class="w-24 h-24 object-contain border rounded-lg bg-gray-50" />
-            <div class="text-xs text-gray-600 space-y-1">
-              <p><span class="font-semibold">Name:</span> <span id="active-filter-name"></span></p>
-              <p><span class="font-semibold">Scale:</span> <span id="debug-scale"></span></p>
-              <p><span class="font-semibold">Offsets:</span> <span id="debug-offsets"></span></p>
-            </div>
-          </div>
-        </div>
+        <p
+          id="upload-message"
+          class="text-sm sm:text-base text-green-700 mt-3 hidden"
+        >
+          Image uploaded! Switch to the <strong>Camera Filter</strong> tab to apply the filter.
+        </p>
       </section>
       <!-- Camera Tab -->
-      <section id="camera-tab" class="hidden bg-white rounded-2xl shadow-md p-4 sm:p-6 mt-4">
-        <h2 class="text-lg sm:text-xl font-medium mb-3">Camera Filter</h2>
-        <p id="no-image-message" class="text-gray-700 text-sm">
-          Please add at least one filter in the Upload tab.
+      <section
+        id="camera-tab"
+        class="tab-content bg-white rounded-2xl shadow-md p-4 sm:p-6 mt-4 hidden"
+        role="tabpanel"
+        aria-labelledby="tab-camera-btn"
+      >
+        <h2 class="text-lg sm:text-xl font-medium mb-3">
+          Camera Filter
+        </h2>
+        <p
+          id="no-image-message"
+          class="text-gray-700 text-sm sm:text-base"
+        >
+          Please upload an image in the <strong>Upload Image</strong> tab first.
         </p>
-        <!-- Camera controls -->
         <div class="mt-3 flex flex-wrap gap-2 items-center">
-          <button id="start-camera"
-                  class="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 py-2 text-sm shadow-sm hidden">
+          <button
+            id="start-camera"
+            class="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 py-2 text-sm sm:text-base shadow-sm hidden"
+          >
             Start Camera
           </button>
-          <button id="stop-camera"
-                  class="bg-red-600 hover:bg-red-700 text-white rounded-full px-5 py-2 text-sm shadow-sm hidden">
+          <button
+            id="stop-camera"
+            class="bg-red-600 hover:bg-red-700 text-white rounded-full px-5 py-2 text-sm sm:text-base shadow-sm hidden"
+          >
             Stop Camera
           </button>
-          <button id="fullscreen-btn"
-                  class="bg-green-600 hover:bg-green-700 text-white rounded-full px-5 py-2 text-sm shadow-sm hidden">
-            Full Screen
-          </button>
-          <label class="flex items-center text-xs sm:text-sm gap-1">
-            <input id="toggle-debug" type="checkbox" class="rounded border-gray-300" />
-            Show debug overlay
-          </label>
         </div>
-        <!-- Alignment / scaling controls -->
-        <div id="alignment-controls" class="mt-4 hidden border rounded-xl p-3 bg-gray-50 text-xs sm:text-sm">
-          <h3 class="font-semibold mb-2 text-sm">Alignment & Animation Controls</h3>
-          <div class="grid sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block mb-1">Mask scale</label>
-              <input id="scale-slider" type="range" min="1.6" max="3.0" step="0.05" class="w-full" />
-            </div>
-            <div>
-              <label class="block mb-1">Vertical offset</label>
-              <input id="offsetY-slider" type="range" min="-0.6" max="0.6" step="0.02" class="w-full" />
-            </div>
-            <div>
-              <label class="block mb-1">Horizontal offset</label>
-              <input id="offsetX-slider" type="range" min="-0.6" max="0.6" step="0.02" class="w-full" />
-            </div>
-            <div>
-              <label class="block mb-1">Jaw sensitivity (lip-sync)</label>
-              <input id="jaw-slider" type="range" min="0.5" max="3.0" step="0.1" class="w-full" />
-            </div>
-          </div>
+        <div
+          id="camera-container"
+          class="relative w-full mt-4 hidden"
+        >
+          <!-- Note: autoplay + muted + playsinline are needed for mobile Safari -->
+          <video
+            id="video"
+            class="hidden"
+            autoplay
+            muted
+            playsinline
+          ></video>
+          <canvas
+            id="canvas"
+            class="max-w-full h-auto rounded-lg border border-gray-200"
+          ></canvas>
         </div>
-        <!-- Camera -->
-        <div id="camera-container" class="relative w-full mt-4 hidden">
-          <video id="video" autoplay muted playsinline class="hidden"></video>
-          <canvas id="canvas" class="max-w-full h-auto rounded-lg border border-gray-200"></canvas>
-        </div>
-        <!-- Debug panel -->
-        <pre id="debug-panel"
-             class="mt-4 text-[10px] sm:text-xs bg-gray-900 text-green-300 rounded-lg p-2 hidden"></pre>
-        <p id="status-message" class="text-xs sm:text-sm text-gray-500 mt-3">
-          Models loading…
+        <p
+          id="status-message"
+          class="text-xs sm:text-sm text-gray-500 mt-3"
+        >
+          Models loading...
         </p>
       </section>
     </main>
   </div>
   <script>
-    // ----------------- GLOBALS & UTILITIES -----------------
-    const MODEL_URL = "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights";
-    const filters = []; // {id, name, image, upperCanvas, lowerCanvas, scale, offsetX, offsetY, jawFactor}
-    let activeFilterId = null;
-    let earsImage = null;
-    let tongueImage = null;
-    let sparklesImage = null;
+    // ========= GLOBAL STATE =========
+    let uploadedImage = null; // original image
+    let upperMaskCanvas = null; // offscreen canvas for upper half
+    let lowerMaskCanvas = null; // offscreen canvas for lower half
+    let modelsLoaded = false;
     let video = null;
     let canvas = null;
     let ctx = null;
-    let modelsLoaded = false;
     let isCameraRunning = false;
     let animationFrameId = null;
-    let blinkFrames = 0;
+    // For mouth baseline (closed mouth)
     let baselineMouthOpen = null;
-    let smoothedMouthOpen = null;
-    const debugPanel = document.getElementById("debug-panel");
-    const debugScale = document.getElementById("debug-scale");
-    const debugOffsets = document.getElementById("debug-offsets");
-    function logDebug(label, data) {
-      console.log("[FaceFilter]", label, data ?? "");
-      if (!document.getElementById("toggle-debug").checked) return;
-      const line = `${new Date().toISOString().split("T")[1]} | ${label}: ${
-        typeof data === "object" ? JSON.stringify(data) : data
-      }`;
-      debugPanel.textContent = line + "\n" + debugPanel.textContent.slice(0, 2000);
-    }
-    function getActiveFilter() {
-      return filters.find((f) => f.id === activeFilterId) || null;
-    }
-    function distance(p1, p2) {
-      const dx = p1.x - p2.x;
-      const dy = p1.y - p2.y;
-      return Math.hypot(dx, dy);
-    }
-    function avgPoint(points) {
-      const s = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
-      return { x: s.x / points.length, y: s.y / points.length };
-    }
-    function eyeAspectRatio(eye) {
-      if (!eye || eye.length < 6) return 0.3;
-      const v1 = distance(eye[1], eye[5]);
-      const v2 = distance(eye[2], eye[4]);
-      const h = distance(eye[0], eye[3]);
-      return (v1 + v2) / (2 * h);
-    }
-    // ----------------- TAB HANDLING -----------------
-    const tabUploadBtn = document.getElementById("tab-upload-btn");
-    const tabCameraBtn = document.getElementById("tab-camera-btn");
+    // ========= TAB LOGIC =========
+    const uploadTabBtn = document.getElementById("tab-upload-btn");
+    const cameraTabBtn = document.getElementById("tab-camera-btn");
     const uploadTab = document.getElementById("upload-tab");
     const cameraTab = document.getElementById("camera-tab");
     function showTab(tab) {
       if (tab === "upload") {
         uploadTab.classList.remove("hidden");
         cameraTab.classList.add("hidden");
-        tabUploadBtn.classList.add("tab-active");
-        tabUploadBtn.classList.remove("tab-inactive");
-        tabCameraBtn.classList.add("tab-inactive");
-        tabCameraBtn.classList.remove("tab-active");
+        uploadTabBtn.classList.add("tab-active");
+        uploadTabBtn.classList.remove("tab-inactive");
+        cameraTabBtn.classList.add("tab-inactive");
+        cameraTabBtn.classList.remove("tab-active");
+        // When leaving camera tab, stop camera
         stopCamera();
       } else {
         uploadTab.classList.add("hidden");
         cameraTab.classList.remove("hidden");
-        tabCameraBtn.classList.add("tab-active");
-        tabCameraBtn.classList.remove("tab-inactive");
-        tabUploadBtn.classList.add("tab-inactive");
-        tabUploadBtn.classList.remove("tab-active");
+        cameraTabBtn.classList.add("tab-active");
+        cameraTabBtn.classList.remove("tab-inactive");
+        uploadTabBtn.classList.add("tab-inactive");
+        uploadTabBtn.classList.remove("tab-active");
+        // If we already have an image + models, show Start button
         updateCameraUIState();
       }
     }
-    tabUploadBtn.addEventListener("click", () => showTab("upload"));
-    tabCameraBtn.addEventListener("click", () => showTab("camera"));
-    // ----------------- MODEL LOADING -----------------
+    uploadTabBtn.addEventListener("click", () => showTab("upload"));
+    cameraTabBtn.addEventListener("click", () => showTab("camera"));
+    // ========= MODEL LOADING =========
     async function loadModels() {
       const status = document.getElementById("status-message");
       try {
-        status.textContent = "Loading models (WASM)…";
-        await tf.setBackend("wasm");
-        await tf.ready();
+        status.textContent = "Loading face detection models...";
+        // Using public model hosting from face-api.js author
+        const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
         ]);
         modelsLoaded = true;
-        status.textContent = "Models loaded. Add filters in Upload tab.";
-        logDebug("modelsLoaded", true);
+        status.textContent =
+          "Models loaded. Upload an image, then switch to Camera Filter.";
         updateCameraUIState();
       } catch (err) {
-        console.error(err);
-        status.textContent = "Error loading models. Check console.";
-        logDebug("modelLoadError", String(err));
+        console.error("Error loading models:", err);
+        status.textContent =
+          "Error loading models. Please refresh the page or try again later.";
       }
     }
-    loadModels();
-    // ----------------- FILTER MANAGEMENT -----------------
-    const filterNameInput = document.getElementById("filter-name-input");
-    const filterImageInput = document.getElementById("filter-image-input");
-    const filtersList = document.getElementById("filters-list");
-    const noFiltersMsg = document.getElementById("no-filters-msg");
-    filterImageInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
+    // ========= IMAGE UPLOAD & MASK SPLIT =========
+    const uploadInput = document.getElementById("upload-input");
+    const uploadPreview = document.getElementById("upload-preview");
+    const uploadPreviewWrapper = document.getElementById("upload-preview-wrapper");
+    const uploadMessage = document.getElementById("upload-message");
+    uploadInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
       if (!file) return;
-      const name =
-        filterNameInput.value.trim() || file.name.replace(/\.[^.]+$/, "");
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-          const filter = createFilterFromImage(name, img);
-          filters.push(filter);
-          if (!activeFilterId) activeFilterId = filter.id;
-          renderFiltersList();
-          updateActiveFilterPreview();
+          uploadedImage = img;
+          uploadPreview.src = e.target.result;
+          uploadPreviewWrapper.classList.remove("hidden");
+          uploadMessage.classList.remove("hidden");
+          // Create upper & lower mask canvases (simple 50/50 split)
+          createMaskLayersFromImage(img);
+          // Reset mouth baseline
+          baselineMouthOpen = null;
+          // Update Camera tab UI
           updateCameraUIState();
-          filterNameInput.value = "";
-          filterImageInput.value = "";
-          logDebug("filterAdded", { id: filter.id, name: filter.name });
         };
-        img.src = ev.target.result;
+        img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     });
-    function createFilterFromImage(name, img) {
-      const splitRatio = 0.55;
-      const splitY = img.height * splitRatio;
-      const upper = document.createElement("canvas");
-      upper.width = img.width;
-      upper.height = splitY;
-      upper.getContext("2d").drawImage(img, 0, 0, img.width, splitY, 0, 0, img.width, splitY);
-      const lower = document.createElement("canvas");
-      lower.width = img.width;
-      lower.height = img.height - splitY;
-      lower.getContext("2d").drawImage(
+    function createMaskLayersFromImage(img) {
+      const halfY = img.height / 2;
+      // Upper mask
+      upperMaskCanvas = document.createElement("canvas");
+      upperMaskCanvas.width = img.width;
+      upperMaskCanvas.height = halfY;
+      const upperCtx = upperMaskCanvas.getContext("2d");
+      upperCtx.drawImage(img, 0, 0, img.width, halfY, 0, 0, img.width, halfY);
+      // Lower mask
+      lowerMaskCanvas = document.createElement("canvas");
+      lowerMaskCanvas.width = img.width;
+      lowerMaskCanvas.height = img.height - halfY;
+      const lowerCtx = lowerMaskCanvas.getContext("2d");
+      lowerCtx.drawImage(
         img,
-        0, splitY, img.width, img.height - splitY,
-        0, 0, img.width, img.height - splitY
+        0,
+        halfY,
+        img.width,
+        img.height - halfY,
+        0,
+        0,
+        img.width,
+        img.height - halfY
       );
-      return {
-        id: Date.now() + Math.random().toString(16).slice(2),
-        name,
-        image: img,
-        upperCanvas: upper,
-        lowerCanvas: lower,
-        scale: 2.2,
-        offsetX: 0,
-        offsetY: -0.1,
-        jawFactor: 1.5,
-      };
     }
-    function renderFiltersList() {
-      filtersList.innerHTML = "";
-      if (!filters.length) {
-        noFiltersMsg.classList.remove("hidden");
-        return;
-      }
-      noFiltersMsg.classList.add("hidden");
-      filters.forEach((f) => {
-        const wrapper = document.createElement("div");
-        wrapper.className = "flex items-center justify-between border rounded-lg px-3 py-2";
-        const left = document.createElement("div");
-        left.className = "flex items-center gap-2";
-        const radio = document.createElement("input");
-        radio.type = "radio";
-        radio.name = "activeFilter";
-        radio.className = "mr-1";
-        radio.checked = f.id === activeFilterId;
-        radio.addEventListener("change", () => {
-          activeFilterId = f.id;
-          baselineMouthOpen = null;
-          smoothedMouthOpen = null;
-          updateActiveFilterPreview();
-          updateCameraUIState();
-          logDebug("activeFilterChanged", { id: f.id, name: f.name });
-        });
-        const thumb = document.createElement("img");
-        thumb.src = f.image.src;
-        thumb.className = "w-10 h-10 object-contain rounded border bg-gray-50";
-        const nameSpan = document.createElement("span");
-        nameSpan.textContent = f.name;
-        nameSpan.className = "text-sm";
-        left.appendChild(radio);
-        left.appendChild(thumb);
-        left.appendChild(nameSpan);
-        wrapper.appendChild(left);
-        filtersList.appendChild(wrapper);
-      });
-    }
-    function updateActiveFilterPreview() {
-      const filter = getActiveFilter();
-      const wrapper = document.getElementById("active-filter-preview-wrapper");
-      if (!filter) {
-        wrapper.classList.add("hidden");
-        return;
-      }
-      wrapper.classList.remove("hidden");
-      document.getElementById("active-filter-preview").src = filter.image.src;
-      document.getElementById("active-filter-name").textContent = filter.name;
-      debugScale.textContent = filter.scale.toFixed(2);
-      debugOffsets.textContent = `X ${filter.offsetX.toFixed(2)}, Y ${filter.offsetY.toFixed(2)}`;
-      // sync sliders
-      document.getElementById("scale-slider").value = filter.scale;
-      document.getElementById("offsetY-slider").value = filter.offsetY;
-      document.getElementById("offsetX-slider").value = filter.offsetX;
-      document.getElementById("jaw-slider").value = filter.jawFactor;
-    }
-    // ----------------- ASSET UPLOADS (ears/tongue/sparkles) -----------------
-    function loadPngToImage(inputId, setFn) {
-      const input = document.getElementById(inputId);
-      input.addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const img = new Image();
-          img.onload = () => {
-            setFn(img);
-            logDebug("assetLoaded", { inputId, width: img.width, height: img.height });
-          };
-          img.src = ev.target.result;
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-    loadPngToImage("ears-image-input", (img) => (earsImage = img));
-    loadPngToImage("tongue-image-input", (img) => (tongueImage = img));
-    loadPngToImage("sparkles-image-input", (img) => (sparklesImage = img));
-    // ----------------- CAMERA CONTROL -----------------
+    // ========= CAMERA CONTROL =========
     const noImageMessage = document.getElementById("no-image-message");
     const startCameraBtn = document.getElementById("start-camera");
     const stopCameraBtn = document.getElementById("stop-camera");
-    const fullscreenBtn = document.getElementById("fullscreen-btn");
     const cameraContainer = document.getElementById("camera-container");
     const statusMessage = document.getElementById("status-message");
-    const alignmentControls = document.getElementById("alignment-controls");
     function updateCameraUIState() {
-      const hasFilter = !!getActiveFilter();
-      if (!cameraTab || cameraTab.classList.contains("hidden")) return;
-      if (!hasFilter) {
-        noImageMessage.textContent = "Please add at least one filter in the Upload tab.";
-        noImageMessage.classList.remove("hidden");
-        startCameraBtn.classList.add("hidden");
-        stopCameraBtn.classList.add("hidden");
-        fullscreenBtn.classList.add("hidden");
-        cameraContainer.classList.add("hidden");
-        alignmentControls.classList.add("hidden");
-      } else if (!modelsLoaded) {
-        noImageMessage.textContent = "Models are still loading. Please wait…";
-        noImageMessage.classList.remove("hidden");
-        startCameraBtn.classList.add("hidden");
-        stopCameraBtn.classList.add("hidden");
-        fullscreenBtn.classList.add("hidden");
-        cameraContainer.classList.add("hidden");
-        alignmentControls.classList.add("hidden");
-      } else {
-        noImageMessage.textContent = "Press Start Camera to apply the filter.";
-        noImageMessage.classList.remove("hidden");
-        startCameraBtn.classList.remove("hidden");
-        stopCameraBtn.classList.add("hidden");
-        fullscreenBtn.classList.add("hidden");
-        cameraContainer.classList.add("hidden");
-        alignmentControls.classList.remove("hidden");
+      if (!cameraTab.classList.contains("hidden")) {
+        // We're on camera tab
+        if (!uploadedImage) {
+          // No image uploaded
+          noImageMessage.classList.remove("hidden");
+          startCameraBtn.classList.add("hidden");
+          stopCameraBtn.classList.add("hidden");
+          cameraContainer.classList.add("hidden");
+        } else if (!modelsLoaded) {
+          noImageMessage.textContent =
+            "Models are still loading. Please wait a moment...";
+          noImageMessage.classList.remove("hidden");
+          startCameraBtn.classList.add("hidden");
+          stopCameraBtn.classList.add("hidden");
+          cameraContainer.classList.add("hidden");
+        } else {
+          // Ready to start camera
+          noImageMessage.textContent =
+            "Press 'Start Camera' to apply the filter.";
+          noImageMessage.classList.remove("hidden");
+          startCameraBtn.classList.remove("hidden");
+          stopCameraBtn.classList.add("hidden");
+          cameraContainer.classList.add("hidden");
+        }
       }
     }
     startCameraBtn.addEventListener("click", startCamera);
     stopCameraBtn.addEventListener("click", stopCamera);
-    fullscreenBtn.addEventListener("click", toggleFullScreen);
-    document.addEventListener('fullscreenchange', () => {
-      fullscreenBtn.textContent = document.fullscreenElement ? 'Exit Full Screen' : 'Full Screen';
-    });
     async function startCamera() {
-      const filter = getActiveFilter();
-      if (!filter || !modelsLoaded) return;
+      if (!uploadedImage || !modelsLoaded) return;
       video = document.getElementById("video");
       canvas = document.getElementById("canvas");
       ctx = canvas.getContext("2d");
+      const constraints = {
+        video: {
+          facingMode: "user", // front-facing
+        },
+        audio: false,
+      };
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
-          audio: false,
-        });
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
+        // Wait for video metadata to get correct dimensions
         video.onloadedmetadata = () => {
-          canvas.width = video.videoWidth || 640;
-          canvas.height = video.videoHeight || 480;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
           isCameraRunning = true;
           noImageMessage.classList.add("hidden");
           startCameraBtn.classList.add("hidden");
           stopCameraBtn.classList.remove("hidden");
-          fullscreenBtn.classList.remove("hidden");
           cameraContainer.classList.remove("hidden");
           statusMessage.textContent =
-            "Camera running. Move your head, blink, and talk to animate the filter.";
-          logDebug("cameraStarted", { width: canvas.width, height: canvas.height });
+            "Camera running. Move your head and mouth to see the filter animate.";
+          // Start detection / drawing loop
           renderLoop();
         };
         await video.play();
       } catch (err) {
-        console.error(err);
-        alert("Camera access denied or unavailable. Check browser permissions.");
-        logDebug("cameraError", String(err));
+        console.error("Error accessing camera:", err);
+        alert(
+          "Camera access denied or unavailable. Please check browser permissions."
+        );
       }
     }
     function stopCamera() {
       if (video && video.srcObject) {
-        video.srcObject.getTracks().forEach((t) => t.stop());
+        video.srcObject.getTracks().forEach((track) => track.stop());
         video.srcObject = null;
       }
       isCameraRunning = false;
@@ -499,219 +355,149 @@
       }
       cameraContainer.classList.add("hidden");
       stopCameraBtn.classList.add("hidden");
-      fullscreenBtn.classList.add("hidden");
       startCameraBtn.classList.remove("hidden");
-      if (getActiveFilter() && modelsLoaded) {
-        noImageMessage.textContent = "Press Start Camera to apply the filter.";
+      if (uploadedImage && modelsLoaded) {
+        noImageMessage.textContent = "Press 'Start Camera' to apply the filter.";
         noImageMessage.classList.remove("hidden");
       }
-      logDebug("cameraStopped");
     }
-    function toggleFullScreen() {
-      if (!document.fullscreenElement) {
-        canvas.requestFullscreen().catch((err) => {
-          console.error('Fullscreen error:', err);
-          logDebug("fullscreenError", String(err));
-        });
-      } else {
-        document.exitFullscreen();
-      }
-    }
-    // ----------------- ALIGNMENT CONTROL HANDLERS -----------------
-    document.getElementById("scale-slider").addEventListener("input", (e) => {
-      const filter = getActiveFilter();
-      if (!filter) return;
-      filter.scale = parseFloat(e.target.value);
-      debugScale.textContent = filter.scale.toFixed(2);
-    });
-    document.getElementById("offsetY-slider").addEventListener("input", (e) => {
-      const filter = getActiveFilter();
-      if (!filter) return;
-      filter.offsetY = parseFloat(e.target.value);
-      debugOffsets.textContent = `X ${filter.offsetX.toFixed(2)}, Y ${filter.offsetY.toFixed(2)}`;
-    });
-    document.getElementById("offsetX-slider").addEventListener("input", (e) => {
-      const filter = getActiveFilter();
-      if (!filter) return;
-      filter.offsetX = parseFloat(e.target.value);
-      debugOffsets.textContent = `X ${filter.offsetX.toFixed(2)}, Y ${filter.offsetY.toFixed(2)}`;
-    });
-    document.getElementById("jaw-slider").addEventListener("input", (e) => {
-      const filter = getActiveFilter();
-      if (!filter) return;
-      filter.jawFactor = parseFloat(e.target.value);
-    });
-    document.getElementById("toggle-debug").addEventListener("change", (e) => {
-      if (e.target.checked) {
-        debugPanel.classList.remove("hidden");
-      } else {
-        debugPanel.classList.add("hidden");
-      }
-    });
-    // ----------------- RENDER LOOP & DRAWING -----------------
+    // ========= FACE DETECTION & DRAWING =========
     async function renderLoop() {
-      if (!isCameraRunning || !video || video.readyState < 2) return;
+      if (!isCameraRunning || !video || video.readyState < 2) {
+        return;
+      }
+      // Draw the video frame into canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Run TinyFaceDetector with landmarks
       const options = new faceapi.TinyFaceDetectorOptions({
         inputSize: 320,
         scoreThreshold: 0.5,
       });
       const detection = await faceapi
-        .detectSingleFace(canvas, options)
+        .detectSingleFace(video, options)
         .withFaceLandmarks();
-      if (detection && getActiveFilter()) {
-        drawFilter(detection);
-      } else {
-        logDebug("noFaceDetected", "");
+      if (detection && upperMaskCanvas && lowerMaskCanvas) {
+        drawFilterWithAnimation(detection);
       }
       animationFrameId = requestAnimationFrame(renderLoop);
     }
-    function drawFilter(det) {
-      const filter = getActiveFilter();
-      if (!filter) return;
-      const lms = det.landmarks;
-      const box = det.detection.box;
-      const leftEyePoints = lms.getLeftEye();
-      const rightEyePoints = lms.getRightEye();
-      const nosePoints = lms.getNose();
-      const mouthPoints = lms.getMouth();
-      const leftEye = avgPoint(leftEyePoints);
-      const rightEye = avgPoint(rightEyePoints);
-      const nose = avgPoint(nosePoints);
-      const cx = (leftEye.x + rightEye.x) / 2 + filter.offsetX * box.width;
-      const cy = (leftEye.y * 2 + nose.y) / 3 + filter.offsetY * box.width;
-      const dx = rightEye.x - leftEye.x;
-      const dy = rightEye.y - leftEye.y;
-      const angle = Math.atan2(dy, dx);
+    function drawFilterWithAnimation(detection) {
+      const landmarks = detection.landmarks;
+      const box = detection.detection.box;
+      // --- Basic face center using nose or eyes ---
+      const nose = landmarks.getNose();
+      const noseCenter = averagePointArray(nose);
+      const leftEye = landmarks.getLeftEye();
+      const rightEye = landmarks.getRightEye();
+      const leftEyeCenter = averagePointArray(leftEye);
+      const rightEyeCenter = averagePointArray(rightEye);
+      const faceCenterX = noseCenter.x;
+      const faceCenterY = noseCenter.y;
       const faceWidth = box.width;
-      const overlayWidth = faceWidth * filter.scale;
-      const maskAspect = filter.image.height / filter.image.width;
-      const overlayHeight = overlayWidth * maskAspect;
-      const upperRatio = filter.upperCanvas.height / filter.image.height;
-      const lowerRatio = filter.lowerCanvas.height / filter.image.height;
-      const upperH = overlayHeight * upperRatio;
-      const lowerH = overlayHeight * lowerRatio;
-      const topY = cy - overlayHeight * 0.5;
-      // Mouth openness with smoothing
-      const m = mouthPoints;
-      const openNow =
-        Math.abs(m[13].y - m[19].y) +
-        Math.abs(m[14].y - m[18].y) +
-        Math.abs(m[15].y - m[17].y);
-      if (smoothedMouthOpen == null) smoothedMouthOpen = openNow;
-      smoothedMouthOpen = smoothedMouthOpen * 0.6 + openNow * 0.4;
-      if (baselineMouthOpen == null) baselineMouthOpen = smoothedMouthOpen;
-      baselineMouthOpen = baselineMouthOpen * 0.98 + smoothedMouthOpen * 0.02;
-      const openDelta = Math.max(
-        0,
-        smoothedMouthOpen - baselineMouthOpen * 1.05
-      );
-      const jawOffset = openDelta * filter.jawFactor;
-      // Blink detection
-      const earLeft = eyeAspectRatio(leftEyePoints);
-      const earRight = eyeAspectRatio(rightEyePoints);
+      const overlayWidth = faceWidth * 2.2;
+      const maskAspect = uploadedImage.height / uploadedImage.width;
+      const overlayTotalHeight = overlayWidth * maskAspect;
+      const halfHeight = overlayTotalHeight / 2;
+      const overlayX = faceCenterX - overlayWidth / 2;
+      const overlayTopY = faceCenterY - halfHeight;
+      // --- Mouth openness for jaw movement ---
+      const mouth = landmarks.getMouth();
+      const mouthTop = mouth[13]; // approximate center top
+      const mouthBottom = mouth[19]; // approximate center bottom
+      const mouthOpen = distance(mouthTop, mouthBottom);
+      if (baselineMouthOpen === null) {
+        // Initialize baseline (closed-ish mouth)
+        baselineMouthOpen = mouthOpen;
+      } else {
+        // Smooth baseline slightly
+        baselineMouthOpen = baselineMouthOpen * 0.9 + mouthOpen * 0.1;
+      }
+      const openDelta = Math.max(0, mouthOpen - baselineMouthOpen * 1.1);
+      const jawOffset = openDelta * 1.5; // tweak factor for visual effect
+      // --- Blink detection (simple) ---
+      const earLeft = eyeAspectRatio(leftEye);
+      const earRight = eyeAspectRatio(rightEye);
       const earAvg = (earLeft + earRight) / 2;
-      if (earAvg < 0.23) blinkFrames = 5;
-      // Begin transform for head rotation
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(angle);
-      ctx.translate(-cx, -cy);
-      const x = cx - overlayWidth / 2;
-      const upperY = topY;
-      const lowerY = topY + upperH + jawOffset;
-      // Blink effect: small scale pulse
-      if (blinkFrames > 0) {
-        const scale = 1.05;
-        ctx.translate(cx, cy);
-        ctx.scale(scale, scale);
-        ctx.translate(-cx, -cy);
-        blinkFrames--;
-      }
-      // Draw mask
+      const blinkThreshold = 0.23; // rough threshold, may vary
+      const isBlinking = earAvg < blinkThreshold;
+      // --- Draw upper mask ---
+      const upperHeightScaled = halfHeight;
       ctx.drawImage(
-        filter.upperCanvas,
-        0, 0, filter.upperCanvas.width, filter.upperCanvas.height,
-        x, upperY, overlayWidth, upperH
+        upperMaskCanvas,
+        0,
+        0,
+        upperMaskCanvas.width,
+        upperMaskCanvas.height,
+        overlayX,
+        overlayTopY,
+        overlayWidth,
+        upperHeightScaled
       );
+      // --- Draw lower mask with jaw offset ---
+      const lowerHeightScaled = halfHeight;
+      const lowerY = overlayTopY + upperHeightScaled + jawOffset;
       ctx.drawImage(
-        filter.lowerCanvas,
-        0, 0, filter.lowerCanvas.width, filter.lowerCanvas.height,
-        x, lowerY, overlayWidth, lowerH
+        lowerMaskCanvas,
+        0,
+        0,
+        lowerMaskCanvas.width,
+        lowerMaskCanvas.height,
+        overlayX,
+        lowerY,
+        overlayWidth,
+        lowerHeightScaled
       );
-      // Ears (optional)
-      if (earsImage && earsImage.complete) {
-        const earWidth = faceWidth * 0.8;
-        const earHeight = earWidth * (earsImage.height / earsImage.width);
-        const earOffsetX = faceWidth * 0.6;
-        const earY = topY - earHeight * 0.4;
-        // left
-        ctx.drawImage(
-          earsImage,
-          0, 0, earsImage.width / 2, earsImage.height,
-          cx - earOffsetX - earWidth / 2,
-          earY,
-          earWidth / 2,
-          earHeight
-        );
-        // right
-        ctx.drawImage(
-          earsImage,
-          earsImage.width / 2,
-          0,
-          earsImage.width / 2,
-          earsImage.height,
-          cx + earOffsetX - earWidth / 2,
-          earY,
-          earWidth / 2,
-          earHeight
-        );
+      // --- Simple blink effect: small circles above eyes ---
+      if (isBlinking) {
+        ctx.save();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+        const effectRadius = Math.max(4, faceWidth * 0.04);
+        ctx.beginPath();
+        ctx.arc(leftEyeCenter.x, leftEyeCenter.y - faceWidth * 0.1, effectRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(rightEyeCenter.x, rightEyeCenter.y - faceWidth * 0.1, effectRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
-      // Tongue (optional) when mouth opens wide
-      if (tongueImage && tongueImage.complete && openDelta > baselineMouthOpen * 0.4) {
-        const mouthCenter = avgPoint([
-          mouthPoints[13],
-          mouthPoints[14],
-          mouthPoints[15],
-          mouthPoints[19],
-          mouthPoints[18],
-          mouthPoints[17],
-        ]);
-        const tongueWidth = faceWidth * 0.5;
-        const tongueHeight = tongueWidth * (tongueImage.height / tongueImage.width);
-        const tx = mouthCenter.x - tongueWidth / 2;
-        const ty = mouthCenter.y + jawOffset * 0.5;
-        ctx.drawImage(tongueImage, tx, ty, tongueWidth, tongueHeight);
-      }
-      // Sparkles (optional) animated with time
-      if (sparklesImage && sparklesImage.complete) {
-        const t = performance.now() / 1000;
-        const bob = Math.sin(t * 3) * (faceWidth * 0.05);
-        const sparkleSize = faceWidth * 0.4;
-        // Left cheek
-        ctx.drawImage(
-          sparklesImage,
-          cx - faceWidth * 0.6 - sparkleSize / 2,
-          cy + faceWidth * 0.1 + bob,
-          sparkleSize,
-          sparkleSize
-        );
-        // Right cheek
-        ctx.drawImage(
-          sparklesImage,
-          cx + faceWidth * 0.6 - sparkleSize / 2,
-          cy + faceWidth * 0.1 - bob,
-          sparkleSize,
-          sparkleSize
-        );
-      }
-      ctx.restore();
-      logDebug("drawFilter", {
-        mouthOpen: smoothedMouthOpen.toFixed(2),
-        jawOffset: jawOffset.toFixed(2),
-        earAvg: earAvg.toFixed(3),
-      });
     }
+    function averagePointArray(points) {
+      const sum = points.reduce(
+        (acc, p) => {
+          acc.x += p.x;
+          acc.y += p.y;
+          return acc;
+        },
+        { x: 0, y: 0 }
+      );
+      return {
+        x: sum.x / points.length,
+        y: sum.y / points.length,
+      };
+    }
+    function distance(p1, p2) {
+      const dx = p1.x - p2.x;
+      const dy = p1.y - p2.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    // Eye Aspect Ratio (EAR)-like metric
+    function eyeAspectRatio(eyePoints) {
+      // eyePoints: 6 points [p1..p6]
+      if (!eyePoints || eyePoints.length < 6) return 0.3;
+      const p1 = eyePoints[0];
+      const p2 = eyePoints[1];
+      const p3 = eyePoints[2];
+      const p4 = eyePoints[3];
+      const p5 = eyePoints[4];
+      const p6 = eyePoints[5];
+      const vertical1 = distance(p2, p6);
+      const vertical2 = distance(p3, p5);
+      const horizontal = distance(p1, p4);
+      const ear = (vertical1 + vertical2) / (2.0 * horizontal);
+      return ear;
+    }
+    // ========= INIT =========
+    loadModels();
   </script>
 </body>
 </html>
