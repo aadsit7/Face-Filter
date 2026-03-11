@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate Extension Icons</title></head>
+<body>
+<h2>Second Brain Icon Generator</h2>
+<p>Right-click each canvas and "Save image as" to create the icon files.</p>
+<div id="icons"></div>
+<script>
+const sizes = [16, 32, 48, 128];
+
+sizes.forEach(size => {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Background circle
+  const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  gradient.addColorStop(0, '#7c6cf0');
+  gradient.addColorStop(1, '#6c5ce7');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Brain/circle icon
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = Math.max(1, size / 16);
+  ctx.lineCap = 'round';
+
+  // Outer circle
+  const r = size * 0.3;
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Clock hand (representing "time" / memory)
+  ctx.beginPath();
+  ctx.moveTo(size/2, size/2);
+  ctx.lineTo(size/2, size/2 - r * 0.7);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(size/2, size/2);
+  ctx.lineTo(size/2 + r * 0.5, size/2 + r * 0.3);
+  ctx.stroke();
+
+  const label = document.createElement('div');
+  label.style.margin = '10px';
+  label.innerHTML = `<p>icon${size}.png (${size}x${size})</p>`;
+  label.appendChild(canvas);
+  document.getElementById('icons').appendChild(label);
+});
+</script>
+</body>
+</html>
