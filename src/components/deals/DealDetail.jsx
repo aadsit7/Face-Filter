@@ -33,7 +33,7 @@ export default function DealDetail({ deal, onClose, onUpdate }) {
           <p className="text-sm font-medium text-recast-navy mt-1">{deal.customerName}</p>
         </div>
         <div>
-          <p className="text-xs text-recast-gray-500 uppercase tracking-wider">Contact Email</p>
+          <p className="text-xs text-recast-gray-500 uppercase tracking-wider">Contact</p>
           <p className="text-sm text-recast-gray-700 mt-1">{deal.customerEmail || deal.customerContact || '-'}</p>
         </div>
         <div>
