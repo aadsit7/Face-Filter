@@ -1,58 +1,91 @@
-import { useState } from 'react'
-import StatusPill from '../ui/StatusPill'
-import Badge from '../ui/Badge'
+import { useState, useMemo } from 'react';
+import Badge from '../ui/Badge';
+import StatusPill from '../ui/StatusPill';
 
-const filters = ['all', 'open', 'in_progress', 'resolved']
+const filterTabs = ['All', 'open', 'in_progress', 'resolved'];
+
+const filterLabels = {
+  All: 'All',
+  open: 'Open',
+  in_progress: 'In Progress',
+  resolved: 'Resolved',
+};
+
+const categoryVariant = {
+  deal_support: 'info',
+  technical: 'purple',
+  billing: 'warning',
+  general: 'default',
+};
+
+const categoryLabel = {
+  deal_support: 'Deal Support',
+  technical: 'Technical',
+  billing: 'Billing',
+  general: 'General',
+};
+
+const priorityVariant = {
+  high: 'danger',
+  medium: 'warning',
+  low: 'default',
+};
 
 export default function TicketList({ tickets, onSelectTicket }) {
-  const [activeFilter, setActiveFilter] = useState('all')
+  const [activeFilter, setActiveFilter] = useState('All');
 
-  const filtered = activeFilter === 'all' ? tickets : tickets.filter((t) => t.status === activeFilter)
-
-  const priorityVariant = { low: 'default', medium: 'warning', high: 'danger' }
+  const filtered = useMemo(() => {
+    if (activeFilter === 'All') return tickets;
+    return tickets.filter((t) => t.status === activeFilter);
+  }, [tickets, activeFilter]);
 
   return (
     <div>
-      <div className="flex gap-2 mb-4">
-        {filters.map((f) => (
+      <div className="flex gap-1 bg-recast-gray-100 rounded-lg p-1 mb-4 w-fit">
+        {filterTabs.map((tab) => (
           <button
-            key={f}
-            onClick={() => setActiveFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              activeFilter === f ? 'bg-recast-navy text-white' : 'bg-recast-gray-100 text-recast-gray-600 hover:bg-recast-gray-200'
+            key={tab}
+            onClick={() => setActiveFilter(tab)}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              activeFilter === tab
+                ? 'bg-white text-recast-navy shadow-sm'
+                : 'text-recast-gray-600 hover:text-recast-navy'
             }`}
           >
-            {f === 'all' ? 'All' : f.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+            {filterLabels[tab]}
           </button>
         ))}
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-center text-recast-gray-400 py-8">No tickets found</p>
+        <p className="text-sm text-recast-gray-500 py-8 text-center">No tickets found.</p>
       ) : (
         <div className="space-y-3">
           {filtered.map((ticket) => (
             <div
               key={ticket.id}
               onClick={() => onSelectTicket?.(ticket)}
-              className="p-4 border border-recast-gray-200 rounded-lg hover:border-recast-navy/30 hover:shadow-sm transition-all cursor-pointer"
+              className="border border-recast-gray-200 rounded-lg p-4 bg-white hover:bg-recast-gray-50 cursor-pointer transition-colors"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h4 className="font-medium text-recast-gray-800 truncate">{ticket.subject}</h4>
-                  <p className="text-sm text-recast-gray-500 mt-1 line-clamp-1">{ticket.description}</p>
-                </div>
+              <div className="flex items-start justify-between mb-2">
+                <h4 className="text-sm font-semibold text-recast-navy">{ticket.subject}</h4>
                 <StatusPill status={ticket.status} />
               </div>
-              <div className="flex gap-3 mt-3">
-                <Badge variant={priorityVariant[ticket.priority]} size="sm">{ticket.priority}</Badge>
-                <Badge size="sm">{ticket.category.replace(/_/g, ' ')}</Badge>
-                <span className="text-xs text-recast-gray-400 ml-auto">{new Date(ticket.createdAt).toLocaleDateString()}</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant={categoryVariant[ticket.category]} size="sm">
+                  {categoryLabel[ticket.category] || ticket.category}
+                </Badge>
+                <Badge variant={priorityVariant[ticket.priority]} size="sm">
+                  {ticket.priority}
+                </Badge>
+                <span className="text-xs text-recast-gray-400 ml-auto">
+                  {new Date(ticket.createdAt).toLocaleDateString()}
+                </span>
               </div>
             </div>
           ))}
         </div>
       )}
     </div>
-  )
+  );
 }
